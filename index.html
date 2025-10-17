@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Granja Automática</title>
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background: #1E90FF; /* Fondo azul */
+    color: #fff;
+    text-align: center;
+  }
+
+  h1, h2 {
+    text-shadow: 2px 2px 4px #000;
+  }
+
+  .status {
+    margin: 10px;
+    font-size: 18px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    display: inline-block;
+  }
+  .connected { background-color: #32CD32; color: #fff; } /* verde */
+  .disconnected { background-color: #FF4500; color: #fff; } /* rojo */
+
+  .mode {
+    margin: 10px;
+    font-size: 18px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    display: inline-block;
+    background-color: #FFD700; /* amarillo */
+    color: #000;
+  }
+
+  .level-container {
+    width: 300px;
+    margin: 20px auto;
+    background: rgba(0,0,0,0.5);
+    padding: 10px;
+    border-radius: 10px;
+  }
+
+  .level-label { margin-bottom: 5px; font-weight: bold; }
+  .level-bar {
+    width: 100%;
+    background: #444;
+    border-radius: 20px;
+    overflow: hidden;
+    height: 25px;
+    margin-bottom: 20px;
+  }
+  .level-fill {
+    height: 100%;
+    width: 0%;
+    background: green;
+    border-radius: 20px;
+    transition: width 0.5s, background 0.5s;
+  }
+
+  button {
+    padding: 10px 20px;
+    margin: 5px;
+    font-size: 16px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+  button:hover { transform: scale(1.1); }
+
+  /* Botones por tipo */
+  .food-btn { background-color: #FFD700; color: #000; }  /* amarillo */
+  .water-btn { background-color: #FF4500; color: #fff; } /* rojo */
+  .auto-btn { background-color: #32CD32; color: #fff; }  /* verde */
+</style>
+</head>
+<body>
+
+<h1>🐔 Granja Automática 🐔</h1>
+
+<!-- Estado de conexión -->
+<div id="mqttStatus" class="status disconnected">Desconectado</div>
+
+<!-- Modo actual -->
+<div id="modeStatus" class="mode">Modo: Manual</div>
+
+<div class="level-container">
+  <div class="level-label">Nivel Comida:</div>
+  <div class="level-bar"><div id="foodLevel" class="level-fill"></div></div>
+
+  <div class="level-label">Nivel Agua:</div>
+  <div class="level-bar"><div id="waterLevel" class="level-fill"></div></div>
+</div>
+
+<h2>Control Manual</h2>
+<button class="food-btn" onclick="sendCommand('FOOD_OPEN')">Abrir Tolva</button>
+<button class="food-btn" onclick="sendCommand('FOOD_CLOSE')">Cerrar Tolva</button>
+<button class="water-btn" onclick="sendCommand('WATER_OPEN')">Abrir Agua</button>
+<button class="water-btn" onclick="sendCommand('WATER_CLOSE')">Cerrar Agua</button>
+
+<h2>Modo Automático</h2>
+<button class="auto-btn" onclick="sendCommand('AUTO_ON')">Activar Automático</button>
+<button class="auto-btn" onclick="sendCommand('AUTO_OFF')">Desactivar Automático</button>
+
+<script>
+const client = mqtt.connect('wss://broker.hivemq.com:8000/mqtt');
+
+const statusDiv = document.getElementById('mqttStatus');
+const modeDiv = document.getElementById('modeStatus');
+
+let isAuto = false; // Por defecto manual
+
+client.on('connect', function () {
+  console.log('Conectado MQTT');
+  statusDiv.innerText = "Conectado";
+  statusDiv.className = "status connected";
+  client.subscribe('granja/food');
+  client.subscribe('granja/water');
+  client.subscribe('granja/command'); // Para recibir cambios de modo
+});
+
+client.on('reconnect', function () {
+  console.log('Reconectando MQTT...');
+  statusDiv.innerText = "Reconectando...";
+  statusDiv.className = "status disconnected";
+});
+
+client.on('offline', function () {
+  console.log('Desconectado MQTT');
+  statusDiv.innerText = "Desconectado";
+  statusDiv.className = "status disconnected";
+});
+
+client.on('message', function (topic, message) {
+  const msg = message.toString();
+
+  // Actualiza niveles
+  if(topic === 'granja/food') updateLevel('foodLevel', parseInt(msg));
+  if(topic === 'granja/water') updateLevel('waterLevel', parseInt(msg));
+
+  // Actualiza modo
+  if(topic === 'granja/command'){
+    if(msg === "AUTO_ON"){ 
+      isAuto = true;
+      modeDiv.innerText = "Modo: Automático";
+    }
+    if(msg === "AUTO_OFF"){ 
+      isAuto = false;
+      modeDiv.innerText = "Modo: Manual";
+    }
+  }
+});
+
+function sendCommand(cmd){
+  client.publish('granja/command', cmd);
+  // Actualiza modo si el usuario presiona automático
+  if(cmd === "AUTO_ON"){ 
+    isAuto = true; 
+    modeDiv.innerText = "Modo: Automático"; 
+  }
+  if(cmd === "AUTO_OFF"){ 
+    isAuto = false; 
+    modeDiv.innerText = "Modo: Manual"; 
+  }
+}
+
+function updateLevel(id, value){
+  const bar = document.getElementById(id);
+  bar.style.width = value + '%';
+  if(value > 70) bar.style.background = 'green';
+  else if(value > 30) bar.style.background = 'yellow';
+  else bar.style.background = 'red';
+}
+</script>
+
+</body>
+</html>
